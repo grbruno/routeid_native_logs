@@ -30,8 +30,12 @@ O Coolify faz o build, publica a porta, emite o certificado e cuida do volume:
    - `LOG_TOKEN` = resultado de `openssl rand -hex 32`
    - `LOG_RETENTION_DAYS` = `30`
 
-   `HOST`, `PORT` e `DATA_DIR` já vêm definidos na imagem — em especial
-   `HOST=0.0.0.0`, sem o qual o proxy do Coolify não alcança o serviço.
+   **Não defina `HOST` nem `DATA_DIR`** — a imagem já traz `HOST=0.0.0.0` e
+   `DATA_DIR=/data`. Copiar o `.env.example` inteiro para cá causa exatamente os
+   dois erros que ele alerta: `HOST=127.0.0.1` faz o proxy receber "connection
+   refused" (o sintoma é `502 Bad Gateway` em **todas** as rotas, inclusive
+   `/api/health`, sem nenhum erro no log do serviço) e `DATA_DIR=./data` joga o
+   log para dentro da camada do contêiner, fora do volume.
 5. **Storages → Add**: Volume com **Destination Path** `/data`.
    É o diretório dos NDJSON — **sem este volume o log se perde a cada redeploy**.
    O `docker-entrypoint.sh` da imagem ajusta o dono do volume no start: sem esse
@@ -142,7 +146,7 @@ jq -c 'select(.entry.scope=="geofence")' data/2026-10-13.ndjson
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| `POST` | `/api/logs` | Ingestão. Corpo: `{ device, entries[] }`. Responde `202 { accepted }`. |
+| `POST` | `/api/logs` | Ingestão. Corpo: `{ device, entries[] }`. Responde `202 { accepted, duplicates }`. |
 | `GET` | `/api/logs` | Consulta. `deviceId`, `scope`, `level`, `q`, `days`, `from`, `to`, `limit`, `format=json\|ndjson\|csv`. |
 | `GET` | `/api/devices` | Agregado por aparelho (modelo, SO, sessões, erros, último registro). |
 | `DELETE` | `/api/logs` | Apaga tudo. `?before=<epoch ms>` preserva o mais novo que o corte. |
@@ -151,6 +155,12 @@ jq -c 'select(.entry.scope=="geofence")' data/2026-10-13.ndjson
 Autenticação: `Authorization: Bearer <LOG_TOKEN>` (ou `?token=<LOG_TOKEN>`).
 Todas as rotas `/api/*`, exceto `/api/health`, exigem o token. Um `500` na
 ingestão mantém o lote na fila do aparelho — ele reenvia sozinho depois.
+
+**Idempotência:** o servidor guarda os `id` que aceitou (janela de 48 h, em
+memória, repovoada a partir dos arquivos no start) e descarta o que já viu. Isso
+importa porque o app só remove o lote da fila depois do `2xx`: se a resposta se
+perder no caminho, ele reenvia o mesmo lote — e sem essa memória o painel
+mostraria o evento duas vezes.
 
 ### Formato de uma linha gravada
 

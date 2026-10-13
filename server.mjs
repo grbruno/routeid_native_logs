@@ -25,9 +25,9 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { createServer } from 'node:http';
+import { existsSync, readFileSync } from 'node:fs';
 import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,12 +48,44 @@ const MAX_ENTRIES_PER_REQUEST = 200;
 /** Teto de linhas devolvidas numa consulta. */
 const MAX_QUERY_LIMIT = 5_000;
 
+/**
+ * Por quanto tempo um `id` já aceito é lembrado para descartar reenvio.
+ *
+ * O app só remove o lote da fila depois do `2xx`. Se a resposta se perder no
+ * caminho (timeout, app morto no meio), ele reenvia o mesmo lote — e sem esta
+ * memória o painel mostraria o mesmo evento duas vezes.
+ */
+const DEDUPE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
 const SCOPES = new Set(['app', 'bridge', 'engine', 'geofence', 'gps', 'perm', 'push', 'track']);
 const LEVELS = new Set(['info', 'warn', 'error']);
 
 if (!TOKEN) {
   console.error('[native-log] LOG_TOKEN não definido — recusando subir sem autenticação.');
   process.exit(1);
+}
+
+/**
+ * Aviso: `HOST` de loopback dentro de um contêiner.
+ *
+ * `127.0.0.1` é o valor certo para o serviço atrás do nginx da própria máquina,
+ * mas **em contêiner** ele faz o processo escutar só no loopback: o proxy
+ * (Traefik/Caddy do Coolify) conecta no IP do contêiner, recebe "connection
+ * refused" e devolve `502 Bad Gateway`. O contêiner fica de pé, não há erro em
+ * log nenhum e o sintoma não aponta para a causa.
+ *
+ * Este aviso existe porque foi exatamente assim que o primeiro deploy no Coolify
+ * falhou — 502 em todas as rotas, sem uma linha de erro para seguir.
+ */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+function warnIfLoopbackInContainer() {
+  if (!LOOPBACK_HOSTS.has(HOST)) return;
+  // `/.dockerenv` existe em qualquer contêiner Docker/Podman.
+  if (!existsSync('/.dockerenv')) return;
+
+  console.warn(`[native-log] AVISO: HOST=${HOST} dentro de um contêiner — o proxy não vai alcançar o serviço (502).`);
+  console.warn('[native-log] Use HOST=0.0.0.0, ou remova a variável: a imagem já define o valor correto.');
 }
 
 /* -------------------------------------------------------------------------- */
@@ -86,6 +118,34 @@ async function appendBatch(lines) {
   await mkdir(DATA_DIR, { recursive: true });
   // O_APPEND garante que escritas concorrentes não se sobreponham.
   await appendFile(fileForDay(dayKey()), lines.join('\n') + '\n', 'utf8');
+}
+
+/**
+ * Ids aceitos recentemente → instante em que o servidor os gravou.
+ *
+ * Guarda o `receivedAt` (relógio do servidor) e não o `at` (relógio do
+ * aparelho) para decidir o descarte: um aparelho com relógio adiantado ou
+ * atrasado não pode alterar a janela de deduplicação.
+ */
+const seenIds = new Map();
+
+/** Repovoa a memória de deduplicação a partir dos arquivos recentes. */
+async function loadSeenIds() {
+  for (const name of (await listDayFiles()).slice(0, 2)) {
+    const content = await readFile(join(DATA_DIR, name), 'utf8').catch(() => '');
+    for (const line of content.split('\n')) {
+      const row = rowFrom(line);
+      if (row) seenIds.set(row.id, row.receivedAt);
+    }
+  }
+}
+
+/** Esquece ids fora da janela. O mapa fica limitado a ~2 dias de registros. */
+function pruneSeenIds() {
+  const cutoff = Date.now() - DEDUPE_WINDOW_MS;
+  for (const [id, receivedAt] of seenIds) {
+    if ((receivedAt ?? 0) < cutoff) seenIds.delete(id);
+  }
 }
 
 /** Apaga arquivos fora da janela de retenção. */
@@ -222,26 +282,41 @@ async function handleIngest(req, res) {
   }
 
   const receivedAt = Date.now();
-  const lines = [];
+  const accepted = [];
+  const acceptedInBatch = new Set();
+  let duplicates = 0;
+
   for (const raw of rawEntries.slice(0, MAX_ENTRIES_PER_REQUEST)) {
     const entry = normalizeEntry(raw);
-    if (entry) lines.push(JSON.stringify({ receivedAt, device, entry }));
+    if (!entry) continue;
+
+    // Reenvio do mesmo lote ou repetição dentro do próprio lote.
+    if (seenIds.has(entry.id) || acceptedInBatch.has(entry.id)) {
+      duplicates += 1;
+      continue;
+    }
+
+    accepted.push(entry);
+    acceptedInBatch.add(entry.id);
   }
 
-  if (lines.length === 0) {
-    json(res, 202, { accepted: 0 }, corsHeaders());
+  if (accepted.length === 0) {
+    json(res, 202, { accepted: 0, duplicates }, corsHeaders());
     return;
   }
 
   try {
-    await appendBatch(lines);
+    await appendBatch(accepted.map((entry) => JSON.stringify({ receivedAt, device, entry })));
   } catch (error) {
     // 500 mantém o lote na fila do aparelho: ele reenvia depois.
+    // Os ids **não** entram em `seenIds` — o lote não foi gravado.
     json(res, 500, { error: `falha ao gravar: ${String(error)}` }, corsHeaders());
     return;
   }
 
-  json(res, 202, { accepted: lines.length }, corsHeaders());
+  for (const entry of accepted) seenIds.set(entry.id, receivedAt);
+
+  json(res, 202, { accepted: accepted.length, duplicates }, corsHeaders());
 }
 
 /** Arquivos que cobrem o período pedido, do mais novo para o mais antigo. */
@@ -339,7 +414,8 @@ async function handleQuery(req, res, url) {
   const format = url.searchParams.get('format') ?? 'json';
 
   if (format === 'ndjson') {
-    const body = entries.map((entry) => JSON.stringify(entry)).join('\n');
+    // Com newline final: sem ele `wc -l` e `jq` enxergam uma linha a menos.
+    const body = entries.length > 0 ? `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n` : '';
     res.writeHead(200, {
       'content-type': 'application/x-ndjson; charset=utf-8',
       'cache-control': 'no-store',
@@ -522,9 +598,15 @@ const server = createServer(async (req, res) => {
 });
 
 await mkdir(DATA_DIR, { recursive: true });
+await loadSeenIds();
 await pruneOldFiles();
 // Retenção também em execução longa: sem isso o disco só é limpo em restart.
-setInterval(() => void pruneOldFiles().catch(() => undefined), 6 * 60 * 60 * 1000).unref();
+setInterval(() => {
+  void pruneOldFiles().catch(() => undefined);
+  pruneSeenIds();
+}, 6 * 60 * 60 * 1000).unref();
+
+warnIfLoopbackInContainer();
 
 server.listen(PORT, HOST, () => {
   console.log(`[native-log] ouvindo em http://${HOST}:${PORT}`);
