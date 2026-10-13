@@ -1,0 +1,13 @@
+{
+  "name": "routeid-native-log",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Recepção e leitura do log de diagnóstico do app nativo routeID (zero dependências).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

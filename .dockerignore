@@ -1,0 +1,13 @@
+# Mantém o contexto de build pequeno: no Coolify a Base Directory é esta pasta,
+# mas o `.gitignore`/contexto pode incluir dados locais de teste — e o volume de
+# log não deve ser copiado para dentro da imagem de jeito nenhum.
+
+data/
+.env
+.env.*
+node_modules/
+*.log
+deploy/
+README.md
+docker-compose.yml
+.dockerignore

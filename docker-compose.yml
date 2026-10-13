@@ -1,0 +1,35 @@
+# Sobe o serviço de log num VPS comum, atrás de um nginx do host.
+#
+#   cp .env.example .env   # e defina LOG_TOKEN
+#   docker compose up -d --build
+#
+# A porta fica presa em 127.0.0.1: só o nginx (na própria máquina) alcança o
+# serviço. Quem quiser ler o log precisa do token.
+#
+# ⚠️ Se o VPS está no Coolify, NÃO use este arquivo: suba pela aplicação com
+# Build Pack `Dockerfile`, Base Directory `server/native-log` e um volume em
+# /data. O Coolify já traz o proxy e o TLS (ver README, seção 1).
+services:
+  native-log:
+    build: .
+    restart: unless-stopped
+    environment:
+      LOG_TOKEN: ${LOG_TOKEN:?defina LOG_TOKEN no .env}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      HOST: 0.0.0.0
+      PORT: '8787'
+      DATA_DIR: /data
+    ports:
+      - '127.0.0.1:8787:8787'
+    expose:
+      - '8787'
+    volumes:
+      - native-log-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8787/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  native-log-data:

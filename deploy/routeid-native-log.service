@@ -1,0 +1,37 @@
+# Unidade systemd — alternativa ao Docker (sem contêiner, sem build).
+#
+#   sudo mkdir -p /opt/routeid-native-log
+#   sudo cp -r server.mjs public package.json .env /opt/routeid-native-log/
+#   sudo cp routeid-native-log.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now routeid-native-log
+#   journalctl -u routeid-native-log -f
+#
+# Requer apenas Node 20+ instalado na máquina.
+
+[Unit]
+Description=routeID — recepção do log do app nativo
+Documentation=file:///opt/routeid-native-log/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=routeid
+Group=routeid
+WorkingDirectory=/opt/routeid-native-log
+# LOG_TOKEN e os demais ajustes vêm daqui (não versione este arquivo).
+EnvironmentFile=/opt/routeid-native-log/.env
+ExecStart=/usr/bin/node /opt/routeid-native-log/server.mjs
+Restart=always
+RestartSec=5
+
+# Endurecimento básico: o serviço só precisa escrever na própria pasta de dados.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/routeid-native-log/data
+
+[Install]
+WantedBy=multi-user.target

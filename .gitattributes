@@ -1,0 +1,11 @@
+# Estes arquivos são consumidos por Linux durante o build da imagem e no start
+# do contêiner. Com fim de linha CRLF (padrão de quem edita no Windows) o build
+# quebra: o `\r` passa a fazer parte do argumento (`apk add ... su-exec\r`) e o
+# `exec` do entrypoint falha com "not found".
+#
+# Travar em LF aqui evita que um clone no Windows (ou o editor do Coolify)
+# reintroduza o problema — inclusive no que o Coolify baixa do repositório.
+
+Dockerfile text eol=lf
+*.sh       text eol=lf
+*.mjs      text eol=lf

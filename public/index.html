@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>routeID · log do app nativo</title>
+    <style>
+      /* Paleta da marca: vermelho (primária) / laranja / verde sobre o navy. */
+      :root {
+        --red: #d92d20;
+        --red-dark: #a81f16;
+        --red-soft: #fee4e2;
+        --orange: #f79009;
+        --orange-soft: #fef0c7;
+        --green: #067647;
+        --green-soft: #d1fadf;
+        --navy: #102a43;
+        --navy-deep: #0d2a43;
+        --ink: #e6edf5;
+        --muted: #93a6bd;
+        --line: #21405c;
+        --surface: #16324c;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--navy-deep);
+        color: var(--ink);
+        font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+
+      /* Faixa da marca no topo. */
+      .brand-bar {
+        height: 4px;
+        background: linear-gradient(90deg, var(--red), var(--orange), var(--green));
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 17px;
+        letter-spacing: 0.2px;
+      }
+
+      h1 span { color: var(--orange); }
+
+      .grow { flex: 1; }
+
+      .muted { color: var(--muted); font-size: 12px; }
+
+      button {
+        font: inherit;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      button:hover { border-color: var(--orange); }
+
+      button.primary {
+        background: var(--red);
+        border-color: var(--red);
+        color: #fff;
+        font-weight: 600;
+      }
+
+      button.primary:hover { background: var(--red-dark); }
+
+      button.on {
+        background: var(--green);
+        border-color: var(--green);
+        color: #fff;
+      }
+
+      main { padding: 18px 22px 40px; }
+
+      .card {
+        background: var(--navy);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        align-items: end;
+      }
+
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--muted);
+        margin-bottom: 5px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        font: inherit;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      input:focus,
+      select:focus { outline: 2px solid var(--orange); outline-offset: 1px; }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+      }
+
+      th {
+        text-align: left;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 10.5px;
+        letter-spacing: 0.6px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        position: sticky;
+        top: 0;
+        background: var(--navy);
+      }
+
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(33, 64, 92, 0.5);
+        vertical-align: top;
+      }
+
+      tr:hover td { background: rgba(247, 144, 9, 0.06); }
+
+      td.detail {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        color: var(--muted);
+        word-break: break-word;
+        max-width: 520px;
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+      }
+
+      .tag.error { background: var(--red-soft); color: var(--red-dark); }
+      .tag.warn { background: var(--orange-soft); color: #7a4a00; }
+      .tag.info { background: var(--green-soft); color: var(--green); }
+
+      .dir { color: var(--muted); white-space: nowrap; }
+      .dir.out { color: var(--orange); }
+
+      .lag { color: var(--orange); font-size: 11px; white-space: nowrap; }
+
+      .device-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+
+      .device {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+      }
+
+      .device b { color: var(--ink); }
+
+      .device .errors { color: var(--red); font-weight: 600; }
+
+      .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+      .status {
+        font-size: 12px;
+        color: var(--muted);
+        min-height: 18px;
+      }
+
+      .status.bad { color: #ffb4ab; }
+    </style>
+  </head>
+
+  <body>
+    <div class="brand-bar"></div>
+
+    <header>
+      <h1>routeID <span>· log do app nativo</span></h1>
+      <div class="grow"></div>
+      <div class="muted" id="status"></div>
+      <button id="auto">Auto 15s</button>
+      <button id="reload">Atualizar</button>
+      <button id="export">Exportar CSV</button>
+    </header>
+
+    <main>
+      <!-- Token fica só no navegador: nada é gravado no servidor além dos logs. -->
+      <section class="card" id="gate">
+        <label for="token">Token de leitura</label>
+        <div style="display: flex; gap: 10px">
+          <input id="token" type="password" placeholder="LOG_TOKEN do servidor" autocomplete="off" />
+          <button class="primary" id="enter">Entrar</button>
+        </div>
+        <p class="muted" style="margin: 10px 0 0">
+          O mesmo token configurado em <code>LOG_TOKEN</code> no servidor e em
+          <code>EXPO_PUBLIC_ROUTEID_LOG_TOKEN</code> no build do app.
+        </p>
+      </section>
+
+      <section class="card" id="devices-card" hidden>
+        <label>Aparelhos no período</label>
+        <div class="device-cards" id="devices"></div>
+      </section>
+
+      <section class="card" id="filters-card" hidden>
+        <div class="filters">
+          <div>
+            <label for="device">Aparelho</label>
+            <select id="device"><option value="">todos</option></select>
+          </div>
+          <div>
+            <label for="scope">Área</label>
+            <select id="scope">
+              <option value="">todas</option>
+              <option value="bridge">bridge (comunicação)</option>
+              <option value="app">app</option>
+              <option value="engine">engine</option>
+              <option value="geofence">geofence</option>
+              <option value="gps">gps</option>
+              <option value="track">track</option>
+              <option value="perm">permissões</option>
+              <option value="push">push</option>
+            </select>
+          </div>
+          <div>
+            <label for="level">Nível</label>
+            <select id="level">
+              <option value="">todos</option>
+              <option value="info">info</option>
+              <option value="warn">alerta</option>
+              <option value="error">erro</option>
+            </select>
+          </div>
+          <div>
+            <label for="days">Período</label>
+            <select id="days">
+              <option value="1">últimas 24 h</option>
+              <option value="3" selected>últimos 3 dias</option>
+              <option value="7">últimos 7 dias</option>
+              <option value="30">últimos 30 dias</option>
+            </select>
+          </div>
+          <div>
+            <label for="limit">Máximo</label>
+            <select id="limit">
+              <option value="200">200</option>
+              <option value="500" selected>500</option>
+              <option value="2000">2000</option>
+              <option value="5000">5000</option>
+            </select>
+          </div>
+          <div style="grid-column: span 2">
+            <label for="q">Busca (evento, detalhe, rota, parada)</label>
+            <input id="q" type="search" placeholder="route:data, geofence, erro…" />
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="table-card" hidden>
+        <div class="status" id="count"></div>
+        <div style="overflow: auto; max-height: 70vh">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 92px">Hora</th>
+                <th style="width: 100px">Atraso</th>
+                <th style="width: 108px">Área</th>
+                <th style="width: 118px">Sentido</th>
+                <th style="width: 190px">Evento</th>
+                <th>Detalhe</th>
+                <th style="width: 118px">Aparelho</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      'use strict';
+
+      /** Cria um elemento com texto sempre escapado (`textContent`). */
+      function el(tag, props, children) {
+        const node = document.createElement(tag);
+        Object.assign(node, props || {});
+        for (const child of children || []) {
+          if (child) node.append(child);
+        }
+        return node;
+      }
+
+      function tag(level, text) {
+        return el('span', { className: 'tag ' + level, textContent: text });
+      }
+
+      function shortId(id) {
+        return id ? id.slice(0, 8) : '—';
+      }
+
+      function lag(row) {
+        const seconds = Math.round((row.receivedAt - row.at) / 1000);
+        // Diferença grande = o registro ficou preso na fila offline do aparelho.
+        if (!Number.isFinite(seconds)) return el('span', { className: 'muted', textContent: '—' });
+        if (seconds < 90) return el('span', { className: 'muted', textContent: seconds + 's' });
+
+        const minutes = Math.round(seconds / 60);
+        const text = minutes < 90 ? minutes + ' min' : Math.round(minutes / 60) + ' h';
+        return el('span', { className: 'lag', textContent: text });
+      }
+
+      const tokenInput = document.getElementById('token');
+      const statusEl = document.getElementById('status');
+      const devicesEl = document.getElementById('devices');
+      const rowsEl = document.getElementById('rows');
+
+      const stored = localStorage.getItem('routeid:log-token');
+      if (stored) tokenInput.value = stored;
+
+      function token() {
+        return tokenInput.value.trim();
+      }
+
+      function setStatus(text, bad) {
+        statusEl.textContent = text;
+        statusEl.className = bad ? 'status bad' : 'status';
+      }
+
+      function query(extra) {
+        const params = new URLSearchParams({
+          days: document.getElementById('days').value,
+          limit: document.getElementById('limit').value,
+        });
+
+        for (const [key, id] of [
+          ['deviceId', 'device'],
+          ['scope', 'scope'],
+          ['level', 'level'],
+          ['q', 'q'],
+        ]) {
+          const value = document.getElementById(id).value.trim();
+          if (value) params.set(key, value);
+        }
+
+        for (const [key, value] of Object.entries(extra || {})) params.set(key, value);
+        return params;
+      }
+
+      async function api(path, params) {
+        const response = await fetch(path + '?' + params.toString(), {
+          headers: { authorization: 'Bearer ' + token() },
+        });
+        if (!response.ok) {
+          throw new Error(response.status === 401 ? 'Token inválido' : 'HTTP ' + response.status);
+        }
+        return response;
+      }
+
+      function show(sectionId, visible) {
+        document.getElementById(sectionId).hidden = !visible;
+      }
+
+      async function loadDevices() {
+        const response = await api('/api/devices', query({ limit: 5000 }));
+        const data = await response.json();
+        const select = document.getElementById('device');
+        const current = select.value;
+
+        select.replaceChildren(el('option', { value: '', textContent: 'todos' }));
+        devicesEl.replaceChildren();
+
+        for (const device of data.devices) {
+          select.append(
+            el('option', {
+              value: device.deviceId,
+              textContent: `${shortId(device.deviceId)} · ${device.model || 'aparelho'}`,
+            })
+          );
+
+          const sessions = el('div', { className: 'muted', textContent: device.sessions + ' sessão(ões)' });
+          const errors = el('div', {});
+          errors.append(
+            el('span', {
+              className: device.errors > 0 ? 'errors' : 'muted',
+              textContent: device.errors + ' erro(s)',
+            }),
+            el('span', { className: 'muted', textContent: ' · ' + device.count + ' registros' })
+          );
+
+          devicesEl.append(
+            el('div', { className: 'device' }, [
+              el('div', {}, [el('b', { textContent: device.model || 'Aparelho desconhecido' })]),
+              el('div', { className: 'muted', textContent: device.os || '—' }),
+              el('div', { className: 'muted', textContent: 'app ' + (device.app || '—') }),
+              el('div', { className: 'muted', textContent: 'último: ' + new Date(device.lastAt).toLocaleString('pt-BR') }),
+              sessions,
+              errors,
+            ])
+          );
+        }
+
+        select.value = current;
+      }
+
+      async function loadEntries() {
+        const response = await api('/api/logs', query());
+        const data = await response.json();
+
+        rowsEl.replaceChildren();
+        for (const row of data.entries) {
+          const direction = row.dir || '—';
+          rowsEl.append(
+            el('tr', {}, [
+              el('td', { textContent: new Date(row.at).toLocaleTimeString('pt-BR') }),
+              el('td', {}, [lag(row)]),
+              el('td', {}, [el('span', { className: 'muted', textContent: row.scope })]),
+              el('td', {}, [
+                el('span', {
+                  className: 'dir' + (row.dir === 'nativo→web' ? ' out' : ''),
+                  textContent: direction,
+                }),
+              ]),
+              el('td', {}, [
+                tag(row.level, row.level),
+                document.createTextNode(' '),
+                el('b', { textContent: row.event }),
+              ]),
+              el('td', { className: 'detail', textContent: row.detail || '' }),
+              el('td', { className: 'muted', textContent: shortId(row.device?.deviceId) }),
+            ])
+          );
+        }
+
+        document.getElementById('count').textContent =
+          data.count === 0
+            ? 'Nenhum registro para os filtros atuais.'
+            : data.count + ' registro(s) — mais recente primeiro.';
+      }
+
+      async function refresh() {
+        if (!token()) return;
+
+        try {
+          await loadDevices();
+          await loadEntries();
+          setStatus('atualizado ' + new Date().toLocaleTimeString('pt-BR'), false);
+        } catch (error) {
+          setStatus(String(error.message || error), true);
+          if (String(error.message).includes('Token')) {
+            show('filters-card', false);
+            show('table-card', false);
+            show('devices-card', false);
+            show('gate', true);
+          }
+        }
+      }
+
+      document.getElementById('enter').addEventListener('click', () => {
+        localStorage.setItem('routeid:log-token', token());
+        show('gate', false);
+        show('devices-card', true);
+        show('filters-card', true);
+        show('table-card', true);
+        void refresh();
+      });
+
+      tokenInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') document.getElementById('enter').click();
+      });
+
+      document.getElementById('reload').addEventListener('click', () => void refresh());
+
+      document.getElementById('export').addEventListener('click', async () => {
+        try {
+          const response = await api('/api/logs', query({ format: 'csv', limit: 5000 }));
+          const blob = await response.blob();
+          const link = el('a', { href: URL.createObjectURL(blob), download: 'routeid-native-log.csv' });
+          link.click();
+          URL.revokeObjectURL(link.href);
+        } catch (error) {
+          setStatus(String(error.message || error), true);
+        }
+      });
+
+      let autoTimer = null;
+      const autoButton = document.getElementById('auto');
+      autoButton.addEventListener('click', () => {
+        if (autoTimer) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          autoButton.classList.remove('on');
+          return;
+        }
+        autoTimer = setInterval(() => void refresh(), 15_000);
+        autoButton.classList.add('on');
+        void refresh();
+      });
+
+      for (const id of ['device', 'scope', 'level', 'days', 'limit']) {
+        document.getElementById(id).addEventListener('change', () => void refresh());
+      }
+
+      let searchTimer = null;
+      document.getElementById('q').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => void refresh(), 400);
+      });
+
+      // Token já salvo: entra direto no painel.
+      if (token()) document.getElementById('enter').click();
+    </script>
+  </body>
+</html>
